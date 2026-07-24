@@ -5,6 +5,7 @@ from routes.discovery import router as discovery_router
 from routes.filter import router as filter_router
 from routes.generator import router as generator_router
 from routes.executor import router as executor_router
+from routes.report import router as report_router
 
 app = FastAPI(
     title="API Test Agent V2 Backend",
@@ -26,5 +27,8 @@ app.include_router(discovery_router)
 app.include_router(filter_router)
 app.include_router(generator_router)
 app.include_router(executor_router)
+app.include_router(report_router)
 
 @app.get("/")
+async def root():
+    return {"message": "API Test Agent V2 Backend is running!"}

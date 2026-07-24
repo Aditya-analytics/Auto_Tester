@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Bot, ArrowRight, Zap, Shield, Search, Lock, AlertCircle, Loader2, Play, Code2, Server } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Bot, ArrowRight, Zap, Shield, Search, Lock, AlertCircle, Loader2, Play, Code2, Server, Activity, CheckCircle, XCircle, Clock, Sparkles } from 'lucide-react';
 
 interface Endpoint {
   path: string;
@@ -63,6 +63,22 @@ const Home: React.FC = () => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResults, setExecutionResults] = useState<any[]>([]);
   const [slaThreshold, setSlaThreshold] = useState(2000);
+  
+  // Module 11: Report States
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+
+  // Module 11: Dashboard Metrics natively calculated in React
+  const dashboardMetrics = useMemo(() => {
+    if (executionResults.length === 0) return null;
+    const total = executionResults.length;
+    const passed = executionResults.filter(r => r.success).length;
+    const failed = total - passed;
+    const slow = executionResults.filter(r => r.is_slow).length;
+    const passRate = Math.round((passed / total) * 100);
+    const score = Math.max(0, Math.round(100 - (failed * (100 / Math.max(1, total))) - (slow * 5)));
+    return { total, passed, failed, slow, passRate, score };
+  }, [executionResults]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,6 +229,42 @@ const Home: React.FC = () => {
       setError(err.message || "Failed to execute tests");
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  // Module 11: Report Download Handler
+  const handleDownloadReport = async () => {
+    if (executionResults.length === 0) return;
+    setIsGeneratingReport(true);
+    
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(executionResults)
+      });
+      
+      if (!response.ok) throw new Error(await response.text());
+      
+      const metrics = await response.json();
+      
+      // Create a Blob from the HTML content and trigger a download
+      const blob = new Blob([metrics.html_content], { type: 'text/html' });
+      const url = window.URL.createObjectURL(blob);
+      setReportUrl(url); // Keep it around if needed
+      
+      // Trigger native download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `API_Test_Report_${new Date().toISOString().split('T')[0]}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+    } catch (err: any) {
+      alert("Failed to generate report: " + err.message);
+    } finally {
+      setIsGeneratingReport(false);
     }
   };
 
@@ -480,8 +532,8 @@ const Home: React.FC = () => {
           </>
         )}
 
-        {/* Module 8: Test Review UI */}
-        {testCases.length > 0 && !error && (
+        {/* Module 8: Test Review UI (Hidden if Dashboard is active) */}
+        {testCases.length > 0 && !error && executionResults.length === 0 && (
           <div className="animate-fade-in-up space-y-8 pb-20">
             <div className="flex flex-col space-y-2 border-b border-slate-200 pb-6">
               <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
@@ -576,35 +628,156 @@ const Home: React.FC = () => {
               ))}
             </div>
 
-            {/* Floating Execute Button */}
-            <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-slate-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50">
-              <div className="max-w-5xl mx-auto flex items-center justify-between">
-                <div className="flex items-center gap-6">
-                  <div className="text-sm font-medium text-slate-600">
-                    <span className="text-slate-900 font-bold">{testCases.length}</span> tests are ready to be executed against the server.
+            {/* Floating Execute Button (Only when not executed yet) */}
+            {executionResults.length === 0 && (
+              <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-slate-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50">
+                <div className="max-w-5xl mx-auto flex items-center justify-between">
+                  <div className="flex items-center gap-6">
+                    <div className="text-sm font-medium text-slate-600">
+                      <span className="text-slate-900 font-bold">{testCases.length}</span> tests are ready to be executed against the server.
+                    </div>
+                    <div className="flex items-center gap-2 border-l border-slate-300 pl-6">
+                      <span className="text-sm font-bold text-slate-700">SLA Threshold (ms):</span>
+                      <input 
+                        type="number" 
+                        value={slaThreshold}
+                        onChange={e => setSlaThreshold(Number(e.target.value))}
+                        className="w-24 px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-primary outline-none font-mono"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 border-l border-slate-300 pl-6">
-                    <span className="text-sm font-bold text-slate-700">SLA Threshold (ms):</span>
-                    <input 
-                      type="number" 
-                      value={slaThreshold}
-                      onChange={e => setSlaThreshold(Number(e.target.value))}
-                      className="w-24 px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-primary outline-none font-mono"
-                    />
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={handleExecute}
+                      disabled={isExecuting}
+                      className={`px-8 py-3 font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg ${
+                        isExecuting 
+                          ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none" 
+                          : "bg-green-600 hover:bg-green-700 text-white active:scale-95 shadow-green-600/30"
+                      }`}
+                    >
+                      {isExecuting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 fill-current" />}
+                      {isExecuting ? "Executing..." : "Execute Test Suite"}
+                    </button>
                   </div>
                 </div>
-                <button 
-                  onClick={handleExecute}
-                  disabled={isExecuting}
-                  className={`px-8 py-3 font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg ${
-                    isExecuting 
-                      ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none" 
-                      : "bg-green-600 hover:bg-green-700 text-white active:scale-95 shadow-green-600/30"
-                  }`}
-                >
-                  {isExecuting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 fill-current" />}
-                  {isExecuting ? "Executing..." : "Execute Test Suite"}
-                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Module 11: In-App Results Dashboard */}
+        {executionResults.length > 0 && dashboardMetrics && (
+          <div className="animate-fade-in-up space-y-8 pb-20">
+            <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-6 gap-4">
+              <div>
+                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                  <Activity className="w-8 h-8 text-blue-500" />
+                  Execution Dashboard
+                </h2>
+                <p className="text-slate-500 text-lg mt-2">
+                  All tests completed. Review the health metrics and endpoints below.
+                </p>
+              </div>
+              <button 
+                onClick={handleDownloadReport}
+                disabled={isGeneratingReport}
+                className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex items-center gap-2 transition-all active:scale-95 shadow-lg"
+              >
+                {isGeneratingReport ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
+                Download HTML Report
+              </button>
+            </div>
+
+            {/* Metric Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
+                <div className="text-slate-500 font-bold text-sm mb-1 uppercase tracking-wider">Health Score</div>
+                <div className={`text-4xl font-extrabold ${dashboardMetrics.score > 80 ? 'text-green-500' : 'text-red-500'}`}>
+                  {dashboardMetrics.score}/100
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
+                <div className="text-slate-500 font-bold text-sm mb-1 uppercase tracking-wider">Pass Rate</div>
+                <div className="text-4xl font-extrabold text-slate-900">{dashboardMetrics.passRate}%</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
+                <div className="text-slate-500 font-bold text-sm mb-1 uppercase tracking-wider">Failed Tests</div>
+                <div className={`text-4xl font-extrabold ${dashboardMetrics.failed > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                  {dashboardMetrics.failed}
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
+                <div className="text-slate-500 font-bold text-sm mb-1 uppercase tracking-wider">Slow APIs</div>
+                <div className={`text-4xl font-extrabold ${dashboardMetrics.slow > 0 ? 'text-amber-500' : 'text-green-500'}`}>
+                  {dashboardMetrics.slow}
+                </div>
+              </div>
+            </div>
+
+            {/* Results Table */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-sm uppercase tracking-wider text-slate-500">
+                      <th className="p-4 font-bold">Status</th>
+                      <th className="p-4 font-bold">Endpoint</th>
+                      <th className="p-4 font-bold">Expected vs Actual</th>
+                      <th className="p-4 font-bold">Speed</th>
+                      <th className="p-4 font-bold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {executionResults.map((result, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="p-4">
+                          {result.success ? (
+                            <div className="flex items-center gap-2 text-green-600 font-bold text-sm bg-green-50 px-3 py-1 rounded-full w-fit">
+                              <CheckCircle className="w-4 h-4" /> Passed
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-red-600 font-bold text-sm bg-red-50 px-3 py-1 rounded-full w-fit">
+                              <XCircle className="w-4 h-4" /> Failed
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded border ${getMethodColor(result.test_case.method)}`}>
+                              {result.test_case.method}
+                            </span>
+                            <span className="font-mono text-sm text-slate-700 font-semibold">{result.test_case.url}</span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-col text-sm">
+                            <span className="text-slate-500 text-xs">Expected: {result.test_case.expected_status.join(', ')}</span>
+                            <span className={`font-bold ${result.success ? 'text-green-600' : 'text-red-600'}`}>
+                              Actual: {result.status_code || 'Error'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className={`flex items-center gap-1 font-mono text-sm font-bold ${result.is_slow ? 'text-amber-500' : 'text-slate-600'}`}>
+                            {result.is_slow && <Clock className="w-4 h-4" />}
+                            {result.response_time_ms}ms
+                          </div>
+                        </td>
+                        <td className="p-4 text-right">
+                          {!result.success && (
+                            <button 
+                              onClick={() => alert("Module 12: Ask AI to Fix coming next!")}
+                              className="px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 text-sm font-bold rounded-lg flex items-center gap-2 ml-auto transition-colors"
+                            >
+                              <Sparkles className="w-4 h-4" /> Ask AI to Fix
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

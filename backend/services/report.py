@@ -1,106 +1,97 @@
-from core.models import ValidationResult
+from typing import List
+from core.models import TestResult, ReportMetrics
 
-def generate_markdown_report(validations: list[ValidationResult]) -> str:
+def generate_report(results: List[TestResult]) -> ReportMetrics:
     """
-    Takes a list of ValidationResults and formats them into a beautiful,
-    human-readable Markdown report with an API Health Score.
+    Module 11: Generates HTML and Markdown reports from execution results.
     """
-    total = len(validations)
-    passed = sum(1 for v in validations if v.passed)
+    total_tests = len(results)
     
-    # Calculate Health Score & Grouping
-    health_score = 100
+    if total_tests == 0:
+        return ReportMetrics(
+            total_tests=0, passed_tests=0, failed_tests=0, slow_tests=0,
+            health_score=0.0, pass_rate=0.0, html_content="<h1>No tests executed.</h1>"
+        )
+        
+    passed_tests = sum(1 for r in results if r.success)
+    failed_tests = total_tests - passed_tests
+    slow_tests = sum(1 for r in results if r.is_slow)
     
-    critical_failures = []       # 500s
-    doc_mismatches = []          # e.g., expected 200, got 201
-    validation_failures = []     # 400s, 415s, etc.
-    performance_warnings = []    # SLA breached
-    false_positives = []         # 404s
-    passed_tests = []
+    pass_rate = round((passed_tests / total_tests) * 100, 2)
     
-    for val in validations:
-        res = val.test_result
-        name = res.test_case.name
-        route = f"`{res.test_case.endpoint.method} {res.test_case.endpoint.path}`"
-        
-        if val.passed:
-            passed_tests.append(f"- ✅ **PASS** | {name} ({route})")
-            continue
-            
-        reason = val.failure_reason
-        actual = res.actual_status
-        expected = res.test_case.expected_status
-        
-        # Categorization and Scoring
-        if "Performance SLA" in reason:
-            health_score -= 2
-            performance_warnings.append(f"- ⚠️ **SLOW** | {name} ({route})\n  - {reason}")
-        elif actual >= 500:
-            health_score -= 10
-            critical_failures.append(f"- 🚨 **CRITICAL** | {name} ({route})\n  - {reason}")
-        elif actual == 404:
-            health_score -= 0
-            false_positives.append(f"- ❓ **FALSE POSITIVE** | {name} ({route})\n  - {reason} (Likely resource missing)")
-        elif actual >= 400:
-            health_score -= 3
-            validation_failures.append(f"- ❌ **FAIL** | {name} ({route})\n  - {reason}")
-        elif str(actual).startswith("2") and any(str(e).startswith("2") for e in expected):
-            # Both are 2xx, but didn't match exactly
-            health_score -= 1
-            doc_mismatches.append(f"- 📝 **DOC MISMATCH** | {name} ({route})\n  - {reason}")
-        else:
-            health_score -= 3
-            validation_failures.append(f"- ❌ **FAIL** | {name} ({route})\n  - {reason}")
-
-    # Prevent score from going below 0
-    health_score = max(0, health_score)
-
-    # Build the Markdown Report
-    report = [
-        "# 🚀 API Test Agent Report\n",
-        "## Executive Summary",
-        f"**Total Tests:** {total} | **Passed:** {passed} ✅ | **Failed:** {total - passed} ❌",
-        f"\n### 🏥 API Health Score: {health_score}/100\n",
-        "---\n"
-    ]
+    # Calculate an arbitrary health score out of 100
+    # Every failure deducts heavily, every slow test deducts slightly
+    health_score = 100.0 - (failed_tests * (100 / max(1, total_tests))) - (slow_tests * 5)
+    health_score = max(0.0, round(health_score, 2))
     
-    if critical_failures:
-        report.append("## 🚨 Critical Failures (Backend Bugs)")
-        report.extend(critical_failures)
-        report.append("")
+    # Generate HTML Table Rows
+    table_rows = ""
+    for r in results:
+        status_color = "green" if r.success else "red"
+        speed_color = "orange" if r.is_slow else "green"
+        table_rows += f"""
+        <tr>
+            <td style="padding:8px; border:1px solid #ddd;">{r.test_case.method}</td>
+            <td style="padding:8px; border:1px solid #ddd;">{r.test_case.url}</td>
+            <td style="padding:8px; border:1px solid #ddd; color:{status_color}; font-weight:bold;">{r.status_code} ({"Pass" if r.success else "Fail"})</td>
+            <td style="padding:8px; border:1px solid #ddd; color:{speed_color};">{r.response_time_ms} ms</td>
+        </tr>
+        """
         
-    if doc_mismatches:
-        report.append("## 📝 Documentation Mismatches")
-        report.extend(doc_mismatches)
-        report.append("")
+    # Generate simple HTML layout
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>API Test Execution Report</title>
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 2rem; color: #333; }}
+            .card {{ background: #f9f9f9; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ddd; }}
+            table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
+            th {{ background: #eee; padding: 10px; text-align: left; border: 1px solid #ddd; }}
+        </style>
+    </head>
+    <body>
+        <h1>API Health Report</h1>
+        <div class="card" style="display:flex; gap: 40px;">
+            <div>
+                <p><strong>Health Score</strong></p>
+                <h2 style="color: {'green' if health_score > 80 else 'red'}; margin:0;">{health_score}/100</h2>
+            </div>
+            <div>
+                <p><strong>Pass Rate</strong></p>
+                <h2 style="margin:0;">{pass_rate}%</h2>
+            </div>
+            <div>
+                <p><strong>Failed Tests</strong></p>
+                <h2 style="color:red; margin:0;">{failed_tests}</h2>
+            </div>
+            <div>
+                <p><strong>Slow APIs</strong></p>
+                <h2 style="color:orange; margin:0;">{slow_tests}</h2>
+            </div>
+        </div>
         
-    if validation_failures:
-        report.append("## ❌ Validation Failures")
-        report.extend(validation_failures)
-        report.append("")
-        
-    if false_positives:
-        report.append("## ❓ Potential False Positives (Resource Missing)")
-        report.extend(false_positives)
-        report.append("")
-        
-    if performance_warnings:
-        report.append("## ⚠️ Performance Warnings")
-        report.extend(performance_warnings)
-        report.append("")
-        
-    if passed_tests:
-        report.append("## ✅ Passed Tests")
-        report.extend(passed_tests)
-        report.append("")
-        
-    report.append("## 💡 Recommendations")
-    if critical_failures:
-        report.append("- **Immediate Action:** Investigate 500-level errors; these are backend crashes.")
-    if doc_mismatches:
-        report.append("- **Documentation:** Update your OpenAPI schema to match the actual 2xx success codes returned by the API.")
-    if validation_failures:
-        report.append("- **Analysis:** Use the `/api/analyze-failure` AI endpoint on your Validation Failures to discover payload issues.")
-        
-    return "\n".join(report)
-
+        <h2>Endpoint Summary</h2>
+        <table>
+            <tr>
+                <th>Method</th>
+                <th>URL</th>
+                <th>Status (Result)</th>
+                <th>Response Time</th>
+            </tr>
+            {table_rows}
+        </table>
+    </body>
+    </html>
+    """
+    
+    return ReportMetrics(
+        total_tests=total_tests,
+        passed_tests=passed_tests,
+        failed_tests=failed_tests,
+        slow_tests=slow_tests,
+        health_score=health_score,
+        pass_rate=pass_rate,
+        html_content=html
+    )

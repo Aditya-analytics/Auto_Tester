@@ -74,6 +74,19 @@ class ValidationResult(BaseModel):
     failure_reason: Optional[str] = None
     ai_explanation: Optional[str] = None
 
+class ReportMetrics(BaseModel):
+    """
+    Module 11: Report Aggregation.
+    Holds the calculated health scores for the final report.
+    """
+    total_tests: int
+    passed_tests: int
+    failed_tests: int
+    slow_tests: int
+    health_score: float
+    pass_rate: float
+    html_content: str = Field(default="")
+
 # if __name__=="__main__":
 #     from services.discovery import discover_openapi
 #     from services.parser import extract_endpoints
