@@ -14,7 +14,7 @@ from routes.explainer import router as explainer_router
 from routes.test_endpoints import router as test_endpoints_router
 
 app = FastAPI(
-    title="API Test Agent V2 Backend",
+    title="TestPilot AI Backend",
     description="Backend services for discovery and test generation.",
     version="2.0.0"
 )
@@ -22,7 +22,7 @@ app = FastAPI(
 # Configure CORS so the React frontend can communicate with this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8000","http://localhost:5174"],
+    allow_origins=["http://127.0.0.1:8000","http://localhost:5173","http://localhost:5174"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,4 +39,4 @@ app.include_router(test_endpoints_router)
 
 @app.get("/")
 async def root():
-    return {"message": "API Test Agent V2 Backend is running!"}
+    return {"message": "TestPilot AI Backend is running!"}

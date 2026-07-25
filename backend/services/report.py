@@ -61,7 +61,7 @@ def generate_report(results: List[TestResult]) -> ReportMetrics:
         </style>
     </head>
     <body>
-        <h1>API Health Report</h1>
+        <h1>TestPilot AI Report</h1>
         <div class="card" style="display:flex; gap: 40px;">
             <div>
                 <p><strong>Health Score</strong></p>

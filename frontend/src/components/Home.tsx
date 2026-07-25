@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Bot, ArrowRight, Zap, Shield, Search, Lock, AlertCircle, Loader2, Play, Code2, Server, Activity, CheckCircle, XCircle, Clock, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
+import { Bot, Rocket, ArrowRight, Zap, Shield, Search, Lock, AlertCircle, Loader2, Play, Code2, Server, Activity, CheckCircle, XCircle, Clock, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Endpoint {
@@ -416,8 +416,8 @@ const Home: React.FC = () => {
 
       <nav className="flex items-center justify-between px-8 py-4 bg-surface border-b border-slate-200 sticky top-0 z-50">
         <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight">
-          <Bot className="w-6 h-6" />
-          <span>API Test Agent V2</span>
+          <Rocket className="w-6 h-6" />
+          <span>TestPilot AI</span>
         </div>
       </nav>
 
