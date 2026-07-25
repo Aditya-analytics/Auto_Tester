@@ -16,7 +16,7 @@ class TestList(BaseModel):
     tests: list[AiTestCase]
 
 
-def rule_based_generate_tests(endpoints: list[Endpoint]) -> list[TestCase]:
+def rule_based_generate_tests(endpoints: list[Endpoint], test_count: int = 2) -> list[TestCase]:
     """
     Takes a list of Endpoints and generates actionable TestCases using basic rules.
     This serves as the fallback if AI generation fails.
@@ -59,9 +59,12 @@ def rule_based_generate_tests(endpoints: list[Endpoint]) -> list[TestCase]:
                 expected_status=endpoint.expected_success_codes
             ))
             
+            # Just slice it to the requested test count
+            test_cases = test_cases[:test_count]
+            
     return test_cases
 
-async def generate_tests(endpoints: list[Endpoint]) -> list[TestCase]:
+async def generate_tests(endpoints: list[Endpoint], test_count: int = 2) -> list[TestCase]:
     """
     AI-powered test generator using Gemini Structured Outputs.
     Batches endpoints and falls back to rule-based generation on failure.
@@ -69,7 +72,7 @@ async def generate_tests(endpoints: list[Endpoint]) -> list[TestCase]:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         print("⚠️ GEMINI_API_KEY not found. Falling back to rule-based generator.")
-        return rule_based_generate_tests(endpoints)
+        return rule_based_generate_tests(endpoints, test_count)
         
     all_tests = []
     
@@ -95,16 +98,15 @@ async def generate_tests(endpoints: list[Endpoint]) -> list[TestCase]:
                 })
                 
             prompt = f"""
-            You are a Senior API QA Engineer. Generate realistic positive and negative test cases from the available endpoint metadata below.
+            You are a Senior API QA Engineer. Generate EXACTLY {test_count} realistic positive and negative test cases per endpoint from the available endpoint metadata below.
             If metadata is missing, make reasonable assumptions based on REST conventions.
             
-            Rules:
-            1. Don't invent endpoints. Only generate tests for the endpoints provided.
-            2. Generate exactly 2-4 test cases per endpoint depending on its HTTP method (e.g., GET: Valid request, Invalid path parameter; POST: Valid payload, Missing required field, Invalid datatype, Empty body).
-            3. Use realistic JSON payloads based on the provided OpenAPI metadata (parameters/requestBody).
-            4. Keep payloads concise and avoid optional fields unless relevant.
+            CRITICAL INSTRUCTIONS:
+            1. You MUST provide at least 2 safe expected status codes for positive test cases (e.g., [200, 201]).
+            2. You MUST provide appropriate and realistic `request_body_json_string` (not just placeholders like "test").
+            3. You MUST provide a clear, descriptive `name` for each test case (e.g., "Valid User Registration").
             
-            Endpoints:
+            Here are the endpoints:
             {batch_data}
             """
             

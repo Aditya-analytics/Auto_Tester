@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Bot, ArrowRight, Zap, Shield, Search, Lock, AlertCircle, Loader2, Play, Code2, Server, Activity, CheckCircle, XCircle, Clock, Sparkles } from 'lucide-react';
+import { Bot, ArrowRight, Zap, Shield, Search, Lock, AlertCircle, Loader2, Play, Code2, Server, Activity, CheckCircle, XCircle, Clock, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 interface Endpoint {
   path: string;
@@ -15,6 +16,7 @@ interface Endpoint {
 
 // Module 8: AI Generator Output Interface
 interface StructuredTestCase {
+  name: string;
   url: string;
   method: string;
   headers_json: string;
@@ -58,10 +60,16 @@ const Home: React.FC = () => {
   // Module 8: AI Generator States
   const [isGenerating, setIsGenerating] = useState(false);
   const [testCases, setTestCases] = useState<StructuredTestCase[]>([]);
+  const [testCount, setTestCount] = useState<number>(2);
   
   // Module 9 & 10: Execution States
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResults, setExecutionResults] = useState<any[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  
+  // Module 12: AI Fix Explainer States
+  const [explainingIdx, setExplainingIdx] = useState<number | null>(null);
+  const [explanations, setExplanations] = useState<Record<number, string>>({});
   const [slaThreshold, setSlaThreshold] = useState(2000);
   
   // Module 11: Report States
@@ -159,7 +167,7 @@ const Home: React.FC = () => {
       const response = await fetch('http://localhost:8000/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoints: finalSelectedEndpoints }),
+        body: JSON.stringify({ endpoints: finalSelectedEndpoints, test_count: testCount }),
       });
 
       if (!response.ok) {
@@ -261,10 +269,35 @@ const Home: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       
-    } catch (err: any) {
-      alert("Failed to generate report: " + err.message);
+    } catch (e: any) {
+      console.error(e);
+      alert("Failed to download report.");
     } finally {
       setIsGeneratingReport(false);
+    }
+  };
+
+  // Module 12: AI Fix Trigger
+  const handleAskAIToFix = async (idx: number, result: any) => {
+    setExplainingIdx(idx);
+    try {
+      const response = await fetch('http://localhost:8000/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result)
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to get explanation");
+      }
+      
+      const data = await response.json();
+      setExplanations(prev => ({ ...prev, [idx]: data.explanation }));
+    } catch (e) {
+      alert("AI Explainer failed. Check the console.");
+      console.error(e);
+    } finally {
+      setExplainingIdx(null);
     }
   };
 
@@ -517,14 +550,27 @@ const Home: React.FC = () => {
                     <div className="text-sm font-medium text-slate-600">
                       <span className="text-slate-900 font-bold">{selectedPaths.size}</span> endpoints ready for test generation
                     </div>
-                    <button 
-                      disabled={selectedPaths.size === 0 || isGenerating}
-                      onClick={handleProceed}
-                      className="px-8 py-3 bg-primary hover:bg-primaryHover text-white font-bold rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/30"
-                    >
-                      {isGenerating ? 'Generating...' : 'Proceed to Testing'}
-                      {!isGenerating && <ArrowRight className="w-5 h-5" />}
-                    </button>
+                    
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-bold text-slate-700">Tests/API:</label>
+                        <input 
+                          type="number" 
+                          min="1" max="10" 
+                          value={testCount} 
+                          onChange={(e) => setTestCount(parseInt(e.target.value) || 2)} 
+                          className="w-16 px-2 py-2 text-center rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" 
+                        />
+                      </div>
+                      <button 
+                        disabled={selectedPaths.size === 0 || isGenerating}
+                        onClick={handleProceed}
+                        className="px-8 py-3 bg-primary hover:bg-primaryHover text-white font-bold rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/30"
+                      >
+                        {isGenerating ? 'Generating...' : 'Proceed to Testing'}
+                        {!isGenerating && <ArrowRight className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -551,12 +597,15 @@ const Home: React.FC = () => {
                   
                   {/* Card Header */}
                   <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-16 text-center font-bold text-xs py-1 rounded border ${getMethodColor(test.method)}`}>
-                        {test.method}
-                      </div>
-                      <div className="font-mono text-slate-900 font-semibold text-lg">
-                        {test.url}
+                    <div className="flex flex-col gap-1">
+                      <div className="font-bold text-slate-800 text-base">{test.name}</div>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-14 text-center font-bold text-xs py-1 rounded border ${getMethodColor(test.method)}`}>
+                          {test.method}
+                        </div>
+                        <div className="font-mono text-slate-500 font-medium text-sm">
+                          {test.url}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 bg-slate-200 px-3 py-1 rounded-full text-sm font-bold text-slate-700">
@@ -729,25 +778,42 @@ const Home: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {executionResults.map((result, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                    {executionResults.map((result, idx) => {
+                      const isExpanded = expandedRows.has(idx);
+                      
+                      const toggleExpand = () => {
+                        const next = new Set(expandedRows);
+                        if (next.has(idx)) next.delete(idx);
+                        else next.add(idx);
+                        setExpandedRows(next);
+                      };
+
+                      return (
+                      <React.Fragment key={idx}>
+                      <tr className="hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={toggleExpand}>
                         <td className="p-4">
-                          {result.success ? (
-                            <div className="flex items-center gap-2 text-green-600 font-bold text-sm bg-green-50 px-3 py-1 rounded-full w-fit">
-                              <CheckCircle className="w-4 h-4" /> Passed
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 text-red-600 font-bold text-sm bg-red-50 px-3 py-1 rounded-full w-fit">
-                              <XCircle className="w-4 h-4" /> Failed
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                            {result.success ? (
+                              <div className="flex items-center gap-2 text-green-600 font-bold text-sm bg-green-50 px-3 py-1 rounded-full w-fit">
+                                <CheckCircle className="w-4 h-4" /> Passed
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-red-600 font-bold text-sm bg-red-50 px-3 py-1 rounded-full w-fit">
+                                <XCircle className="w-4 h-4" /> Failed
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded border ${getMethodColor(result.test_case.method)}`}>
-                              {result.test_case.method}
-                            </span>
-                            <span className="font-mono text-sm text-slate-700 font-semibold">{result.test_case.url}</span>
+                          <div className="flex flex-col gap-1">
+                            <span className="font-bold text-slate-800 text-sm">{result.test_case.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${getMethodColor(result.test_case.method)}`}>
+                                {result.test_case.method}
+                              </span>
+                              <span className="font-mono text-xs text-slate-500">{result.test_case.url}</span>
+                            </div>
                           </div>
                         </td>
                         <td className="p-4">
@@ -767,15 +833,89 @@ const Home: React.FC = () => {
                         <td className="p-4 text-right">
                           {!result.success && (
                             <button 
-                              onClick={() => alert("Module 12: Ask AI to Fix coming next!")}
-                              className="px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 text-sm font-bold rounded-lg flex items-center gap-2 ml-auto transition-colors"
+                              onClick={() => handleAskAIToFix(idx, result)}
+                              disabled={explainingIdx === idx}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 ml-auto transition-all ${
+                                explainingIdx === idx 
+                                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                                  : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                              }`}
                             >
-                              <Sparkles className="w-4 h-4" /> Ask AI to Fix
+                              {explainingIdx === idx ? (
+                                <>
+                                  <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+                                  Analyzing...
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-4 h-4" /> Ask AI to Fix
+                                </>
+                              )}
                             </button>
                           )}
                         </td>
                       </tr>
-                    ))}
+
+                      {/* Expanded Details Row */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <td colSpan={5} className="p-0">
+                            <div className="p-6 grid grid-cols-2 gap-6">
+                              <div>
+                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Request Body</h4>
+                                <pre className="bg-slate-900 text-slate-300 p-3 rounded-lg text-xs font-mono overflow-auto max-h-40">
+                                  {result.test_case.request_body_json !== 'null' ? result.test_case.request_body_json : '// No body'}
+                                </pre>
+                              </div>
+                              <div className="space-y-4">
+                                <div>
+                                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Response Details</h4>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-white p-3 rounded border border-slate-200">
+                                      <div className="text-xs text-slate-500">Expected Status</div>
+                                      <div className="font-bold text-slate-700">{result.test_case.expected_status.join(', ')}</div>
+                                    </div>
+                                    <div className="bg-white p-3 rounded border border-slate-200">
+                                      <div className="text-xs text-slate-500">Actual Status</div>
+                                      <div className={`font-bold ${result.success ? 'text-green-600' : 'text-red-600'}`}>
+                                        {result.status_code || 'Error'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Response Body Sneak Peek */}
+                                <div>
+                                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Response Body (Snippet)</h4>
+                                  <pre className="bg-slate-100 text-slate-600 p-3 rounded border border-slate-200 text-xs font-mono overflow-auto max-h-24">
+                                    {result.response_body ? String(result.response_body).slice(0, 200) + '...' : '// None'}
+                                  </pre>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {/* Expanded AI Explanation Row */}
+                      {explanations[idx] && (
+                        <tr key={`ai-${idx}`} className="bg-indigo-50/30">
+                          <td colSpan={5} className="p-6">
+                            <div className="bg-white rounded-xl border border-indigo-100 shadow-inner overflow-hidden">
+                              <div className="bg-indigo-500/10 px-4 py-2 border-b border-indigo-100 flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-indigo-600" />
+                                <span className="font-bold text-indigo-900 text-sm">AI Fix Suggestion</span>
+                              </div>
+                              <div className="p-6 text-slate-800 text-sm prose prose-indigo max-w-none">
+                                <ReactMarkdown>{explanations[idx]}</ReactMarkdown>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                    );
+                  })}
                   </tbody>
                 </table>
               </div>

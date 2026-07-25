@@ -12,6 +12,7 @@ router = APIRouter(
 
 class GenerationRequest(BaseModel):
     endpoints: List[Endpoint]
+    test_count: int = 2
 
 @router.post("/generate", response_model=List[StructuredTestCase])
 async def generate_api_tests(request: GenerationRequest):
@@ -25,7 +26,7 @@ async def generate_api_tests(request: GenerationRequest):
         if not request.endpoints:
             raise ValueError("No endpoints provided for test generation.")
             
-        test_cases = generate_tests(request.endpoints)
+        test_cases = generate_tests(request.endpoints, request.test_count)
         return test_cases
         
     except Exception as e:

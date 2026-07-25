@@ -8,7 +8,7 @@ router = APIRouter(
 )
 
 @router.post("/discover")
-async def discover_api(config: BaseConfig):
+def discover_api(config: BaseConfig):
     """
     Module 1 & 2 integration endpoint.
     Accepts the base URL, attempts to discover the OpenAPI spec, 

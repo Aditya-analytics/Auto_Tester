@@ -2,49 +2,56 @@ import os
 import asyncio
 from dotenv import load_dotenv
 from google import genai
-from core.models import ValidationResult
+from core.models import TestResult
 
 # Load environment variables from the .env file one level up (in auto_test)
 dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
 load_dotenv(dotenv_path)
 
-async def analyze_failure(validation: ValidationResult) -> ValidationResult:
+async def analyze_failure(test_result: TestResult) -> str:
     """
-    Takes a FAILED ValidationResult and uses the official Google GenAI SDK to analyze the failure.
-    Attaches the 'ai_explanation' string to the object.
+    Module 12: AI Fix Suggestion (On Demand).
+    Takes a FAILED TestResult and uses the official Google GenAI SDK to analyze the failure.
+    Returns a markdown formatted explanation.
     """
-    if validation.passed:
-        validation.ai_explanation = "Test passed perfectly. No analysis needed."
-        return validation
+    if test_result.success:
+        return "Test passed perfectly. No analysis needed."
         
-    print(f"🤖 [Gemini AI Engine] Analyzing failure for: {validation.test_result.test_case.name}...")
+    print(f"🤖 [Gemini AI Engine] Analyzing failure for: {test_result.test_case.url}...")
     
-    expected = validation.test_result.test_case.expected_status
-    actual = validation.test_result.actual_status
-    method = validation.test_result.test_case.endpoint.method
-    path = validation.test_result.test_case.endpoint.path
+    expected = test_result.test_case.expected_status
+    actual = test_result.status_code
+    method = test_result.test_case.method
+    path = test_result.test_case.url
     
     # Truncate response body to save tokens
-    body = validation.test_result.response_body[:300]
+    body = str(test_result.response_body)[:500] if test_result.response_body else "No response body"
+    request_body = test_result.test_case.request_body_json
     
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        validation.ai_explanation = "⚠️ GEMINI_API_KEY is missing from .env file."
-        return validation
+        return "⚠️ GEMINI_API_KEY is missing from .env file."
 
     prompt = f"""
     Act as a Senior API QA Engineer. 
     The automated test for `{method} {path}` failed.
+    We sent this request body: {request_body}
     We expected one of these HTTP status codes {expected}, but the server returned {actual}.
     The server's response body snippet is: {body}
     
-    First, categorize this failure by prefixing your response with exactly ONE of these tags:
-    - 🚨 Backend Bug (for 500-level crashes)
-    - ⚠️ False Positive / Test Assumption (e.g. 404 because resource wasn't created)
-    - ❌ Schema Violation (e.g. 415/400 due to bad payload)
-    - 📝 API Documentation Mismatch (e.g. Swagger says 200, API returns 201)
+    Please provide a brief, actionable analysis structured EXACTLY with these markdown headings:
     
-    Then, explain what likely went wrong and how the backend developer can fix it in exactly 2 concise sentences. Do not use markdown formatting.
+    ### Possible Cause
+    (Explain why the server likely rejected the request)
+    
+    ### Suggested Fix
+    (Provide the exact steps to fix the backend API code)
+    
+    ### Code Example
+    (Provide a small pseudo-code snippet showing the fix)
+    
+    ### Best Practice
+    (A 1-sentence tip on avoiding this in the future)
     """
     
     try:
@@ -56,13 +63,10 @@ async def analyze_failure(validation: ValidationResult) -> ValidationResult:
             model='gemini-2.5-flash-lite',
             contents=prompt
         )
-        explanation = response.text.strip()
+        return response.text.strip()
                 
     except Exception as e:
-        explanation = f"⚠️ SDK Error calling Gemini: {str(e)}"
-        
-    validation.ai_explanation = explanation
-    return validation
+        return f"⚠️ SDK Error calling Gemini: {str(e)}"
 
 # ==========================================
 # MANUAL TESTING

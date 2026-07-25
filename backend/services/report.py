@@ -29,10 +29,19 @@ def generate_report(results: List[TestResult]) -> ReportMetrics:
     for r in results:
         status_color = "green" if r.success else "red"
         speed_color = "orange" if r.is_slow else "green"
+        # Truncate request body if it exists
+        body_snippet = "None"
+        if r.test_case.request_body_json and r.test_case.request_body_json != "null":
+            body_snippet = str(r.test_case.request_body_json)
+            if len(body_snippet) > 100:
+                body_snippet = body_snippet[:100] + "..."
+                
         table_rows += f"""
         <tr>
-            <td style="padding:8px; border:1px solid #ddd;">{r.test_case.method}</td>
-            <td style="padding:8px; border:1px solid #ddd;">{r.test_case.url}</td>
+            <td style="padding:8px; border:1px solid #ddd; font-weight:bold;">{r.test_case.name}</td>
+            <td style="padding:8px; border:1px solid #ddd;">{r.test_case.method} <br/> <small>{r.test_case.url}</small></td>
+            <td style="padding:8px; border:1px solid #ddd;"><code>{body_snippet}</code></td>
+            <td style="padding:8px; border:1px solid #ddd;">{r.test_case.expected_status}</td>
             <td style="padding:8px; border:1px solid #ddd; color:{status_color}; font-weight:bold;">{r.status_code} ({"Pass" if r.success else "Fail"})</td>
             <td style="padding:8px; border:1px solid #ddd; color:{speed_color};">{r.response_time_ms} ms</td>
         </tr>
@@ -75,9 +84,11 @@ def generate_report(results: List[TestResult]) -> ReportMetrics:
         <h2>Endpoint Summary</h2>
         <table>
             <tr>
-                <th>Method</th>
-                <th>URL</th>
-                <th>Status (Result)</th>
+                <th>Test Case Name</th>
+                <th>Endpoint</th>
+                <th>Request Body</th>
+                <th>Expected Status</th>
+                <th>Actual Status</th>
                 <th>Response Time</th>
             </tr>
             {table_rows}

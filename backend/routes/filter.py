@@ -10,7 +10,7 @@ router = APIRouter(
 )
 
 @router.post("/endpoints", response_model=list[Endpoint])
-async def get_filtered_endpoints(config: BaseConfig):
+def get_filtered_endpoints(config: BaseConfig):
     """
     Modules 2, 3 & 5 integration endpoint.
     Accepts the base URL, discovers the raw OpenAPI spec, parses it into 

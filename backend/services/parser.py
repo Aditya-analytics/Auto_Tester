@@ -1,5 +1,31 @@
 from core.models import Endpoint
 
+def resolve_schema(schema, full_swagger):
+    if not isinstance(schema, dict):
+        return schema
+    if "$ref" in schema:
+        ref_path = schema["$ref"]
+        # e.g. #/components/schemas/BaseConfig
+        parts = ref_path.replace("#/", "").split("/")
+        curr = full_swagger
+        for p in parts:
+            if p in curr:
+                curr = curr[p]
+            else:
+                return schema
+        return resolve_schema(curr, full_swagger)
+    
+    # Recursively resolve dicts
+    resolved = {}
+    for k, v in schema.items():
+        if isinstance(v, dict):
+            resolved[k] = resolve_schema(v, full_swagger)
+        elif isinstance(v, list):
+            resolved[k] = [resolve_schema(i, full_swagger) if isinstance(i, dict) else i for i in v]
+        else:
+            resolved[k] = v
+    return resolved
+
 def extract_endpoints(swagger_data: dict) -> list[Endpoint]:
     """
     Module 3 & 4: Parser + Extractor
@@ -51,7 +77,7 @@ def extract_endpoints(swagger_data: dict) -> list[Endpoint]:
             
             for param in parameters:
                 if param.get("in") == "body":
-                    request_schema = param.get("schema")
+                    request_schema = resolve_schema(param.get("schema"), swagger_data)
                     if not content_type:
                         content_type = "application/json" # fallback
                     break
@@ -61,7 +87,7 @@ def extract_endpoints(swagger_data: dict) -> list[Endpoint]:
                 content = operation["requestBody"].get("content", {})
                 if content:
                     content_type = list(content.keys())[0] # e.g. application/json
-                    request_schema = content[content_type].get("schema")
+                    request_schema = resolve_schema(content[content_type].get("schema"), swagger_data)
 
             # 4. Response Codes
             responses = []

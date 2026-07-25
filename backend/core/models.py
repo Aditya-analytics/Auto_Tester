@@ -6,7 +6,11 @@ class BaseConfig(BaseModel):
     Module 1: User Input Configuration.
     Collects the minimum required information to start testing.
     """
-    base_url: HttpUrl = Field(..., description="The base URL of the API to test.")
+    base_url: HttpUrl = Field(
+        ..., 
+        description="The base URL of the API to test.",
+        json_schema_extra={"example": "http://127.0.0.1:8000"}
+    )
 
 class Endpoint(BaseModel):
     path: str = Field(..., description="The URL path (e.g., /users/{id})")
@@ -43,6 +47,7 @@ class StructuredTestCase(BaseModel):
     """
     url: str = Field(..., description="The path of the endpoint, e.g. /users/{id}")
     method: str = Field(..., description="The HTTP method, e.g. GET, POST")
+    name: str = Field(..., description="A short, descriptive name for this test case, e.g. 'Successful User Login'")
     headers_json: str = Field(default="{}", description="JSON stringified dictionary of expected headers")
     request_body_json: str = Field(default="null", description="JSON stringified request body to send")
     expected_status: list[int] = Field(..., description="List of expected HTTP Status Codes for this test")
